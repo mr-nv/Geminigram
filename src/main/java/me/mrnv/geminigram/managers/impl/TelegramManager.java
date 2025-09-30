@@ -239,12 +239,7 @@ public class TelegramManager
                     return UpdatesListener.CONFIRMED_UPDATES_ALL;
                 }, e ->
                 {
-                    if( e.response() != null )
-                    {
-                        // dont care
-                    }
-                    else
-                        e.printStackTrace();
+                    // dont care
                 } );
 
                 bots.add( bot );

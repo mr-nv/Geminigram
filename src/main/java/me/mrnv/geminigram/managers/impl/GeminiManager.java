@@ -177,7 +177,16 @@ public class GeminiManager extends Thread
                     if( response != null && response.text() != null )
                     {
                         Managers.SPAM.forceUpdateTime( me.user().id(), message.chat().id(), spamtype );
-                        Managers.TELEGRAM.reply( bot, response.text(), message );
+
+                        String send = response.text();
+                        if( Managers.CONFIG.getBool( "telegram.debug" ) )
+                        {
+                            send += "\n\n%s - %d - %d".formatted(
+                                    model.getCode(), budget, list != null ? list.size() : -1
+                            );
+                        }
+
+                        Managers.TELEGRAM.reply( bot, send, message );
                     }
                 } );
             }
