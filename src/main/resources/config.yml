@@ -1,0 +1,61 @@
+# Geminigram configuration file
+
+####
+# Telegram bots
+# You can set multiple commands like this:
+#   commandAsk: [ "/ask", "/askbot" ]
+####
+telegram:
+  reactToImages: true
+  bots:
+    - apiKey: ""
+      commandAsk: [ "/ask" ]
+      commandInstructions: [ "/instructions" ]
+
+####
+# Simple antispam system, works on chats (not users)
+# Time is specified in milliseconds (1 second = 1000 milliseconds)
+#
+# If someone triggers the system (interacts with the bot while the cooldown is active)
+# then half of the time specified here gets added to the chat
+####
+antispam:
+  text: 7000
+  images: 16000
+
+####
+# Models to use
+# Geminigram will pick the model to use randomly
+#
+# Available models are:
+#   - "gemini-2.5-pro"
+#   - "gemini-2.5-flash"
+#   - "gemini-2.5-flash-lite"
+#   - "gemini-2.0-flash"
+#   - "gemini-2.0-flash-lite"
+#
+# Thinking states are: true/false/random
+# Thinking budget can be set to "auto" to let Gemini decide
+####
+gemini:
+  apiKey: ""
+  images:
+    thinking:
+      enabled: random
+      budget: 300
+    models:
+      - "gemini-2.5-pro"
+      - "gemini-2.5-flash"
+#      - "gemini-2.5-flash-lite"
+#      - "gemini-2.0-flash"
+#      - "gemini-2.0-flash-lite"
+  text:
+    thinking:
+      enabled: random
+      budget: 600
+    models:
+      - "gemini-2.5-pro"
+      - "gemini-2.5-flash"
+      - "gemini-2.5-flash-lite"
+#      - "gemini-2.0-flash"
+#      - "gemini-2.0-flash-lite"

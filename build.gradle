@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'application'
+    id("com.gradleup.shadow") version "8.3.9"
+}
+
+group = 'me.mrnv.geminigram'
+version = '1.0'
+mainClassName = "me.mrnv.geminigram.Main"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.google.genai:google-genai:1.17.0'
+
+    implementation 'org.slf4j:slf4j-nop:2.0.17'
+    implementation 'org.apache.logging.log4j:log4j-core:2.24.2'
+    implementation 'org.apache.logging.log4j:log4j-api:2.24.2'
+
+    compileOnly 'org.projectlombok:lombok:1.18.36'
+    annotationProcessor 'org.projectlombok:lombok:1.18.36'
+
+    implementation "com.amihaiemil.web:eo-yaml:8.0.6"
+    implementation 'com.github.pengrad:java-telegram-bot-api:7.11.0'
+
+    implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
+}
