@@ -6,11 +6,14 @@ import com.pengrad.telegrambot.UpdatesListener;
 import com.pengrad.telegrambot.model.*;
 import com.pengrad.telegrambot.model.request.ChatAction;
 import com.pengrad.telegrambot.model.request.ParseMode;
+import com.pengrad.telegrambot.model.request.ReplyParameters;
 import com.pengrad.telegrambot.request.*;
 import com.pengrad.telegrambot.response.BaseResponse;
 import com.pengrad.telegrambot.response.GetChatMemberResponse;
 import com.pengrad.telegrambot.response.GetFileResponse;
 import com.pengrad.telegrambot.response.GetMeResponse;
+import kotlin.Pair;
+import me.mrnv.geminigram.common.AttachmentType;
 import me.mrnv.geminigram.common.SpamType;
 import me.mrnv.geminigram.common.TelegramBotEntry;
 import me.mrnv.geminigram.managers.Managers;
@@ -45,6 +48,7 @@ public class TelegramManager
     public void start()
     {
         boolean reactToImages = Managers.CONFIG.getBool( "telegram.reactToImages" );
+        boolean reactToVideos = Managers.CONFIG.getBool( "telegram.reactToVideos" );
 
         for( TelegramBotEntry entry : startlist )
         {
@@ -98,7 +102,12 @@ public class TelegramManager
                             {
                                 User from = message.from();
 
-                                String text = message.photo() != null ? message.caption() : message.text();
+                                String text;
+                                if( message.photo() != null || message.video() != null )
+                                    text = message.caption();
+                                else
+                                    text = message.text();
+
                                 String[] split = text == null ? null : text.split( " " );
 
                                 // start
@@ -209,10 +218,30 @@ public class TelegramManager
                                     if( !Managers.SPAM.check( me.user().id(), chat.id(), SpamType.IMAGES ) ) continue;
 
                                     String finalText2 = text;
-                                    downloadImage( bot, message.photo(), bytes ->
+                                    downloadAttachment( bot, message.photo(), bytes ->
                                     {
-                                        Managers.GEMINI.reply( bot, me, message, finalText2, instructions, bytes );
+                                        Managers.GEMINI.reply( bot, me, message, finalText2, instructions,
+                                                new Pair<>( AttachmentType.IMAGE, bytes ) );
                                     } );
+
+                                    continue;
+                                }
+
+                                boolean hasvideo = reactToVideos && message.video() != null && message.mediaGroupId() == null;
+                                if( hasvideo )
+                                {
+                                    Video video = message.video();
+                                    if( video.duration() <= 30 ) // only work with short videos (30 seconds)
+                                    {
+                                        if( !Managers.SPAM.check( me.user().id(), chat.id(), SpamType.VIDEOS ) ) continue;
+
+                                        String finalText2 = text;
+                                        downloadAttachment( bot, video, bytes ->
+                                        {
+                                            Managers.GEMINI.reply( bot, me, message, finalText2, instructions,
+                                                    new Pair<>( AttachmentType.VIDEO, bytes ) );
+                                        } );
+                                    }
 
                                     continue;
                                 }
@@ -288,7 +317,7 @@ public class TelegramManager
                         .parseMode( ParseMode.MarkdownV2 );
 
                 if( reply )
-                    send = send.replyToMessageId( message.messageId() );
+                    send.setReplyParameters( new ReplyParameters( message.messageId() ) );
 
                 if( !bot.execute( send ).isOk() )
                 {
@@ -296,7 +325,7 @@ public class TelegramManager
                     send = new SendMessage( message.chat().id(), cleanResponse( chunk ) );
 
                     if( reply )
-                        send = send.replyToMessageId( message.messageId() );
+                        send.setReplyParameters( new ReplyParameters( message.messageId() ) );
 
                     bot.execute( send );
                 }
@@ -319,19 +348,37 @@ public class TelegramManager
         return ret;
     }
 
-    private void downloadImage( TelegramBot bot, PhotoSize[] photos, Consumer< byte[] > callback )
+    private void downloadAttachment( TelegramBot bot, Object attachment, Consumer< byte[] > callback )
     {
         try
         {
-            // find the biggest photo
-            PhotoSize pick = photos[ 0 ];
-            for( PhotoSize photo : photos )
+            String fileid = null;
+
+            if( attachment instanceof PhotoSize[] photos )
             {
-                if( photo.width() > pick.width() )
-                    pick = photo;
+                // find the biggest photo
+                PhotoSize pick = photos[ 0 ];
+                for( PhotoSize photo : photos )
+                {
+                    if( photo.width() > pick.width() )
+                        pick = photo;
+                }
+
+                fileid = pick.fileId();
+            }
+            else if( attachment instanceof Video video )
+            {
+                // limit to mp4 videos only
+                if( video.mimeType() == null || !"video/mp4".equals( video.mimeType() ) )
+                    return;
+
+                fileid = video.fileId();
             }
 
-            bot.execute( new GetFile( pick.fileId() ),
+            // shouldnt happen
+            if( fileid == null ) return;
+
+            bot.execute( new GetFile( fileid ),
                     new Callback< GetFile, GetFileResponse >()
                     {
                         @Override

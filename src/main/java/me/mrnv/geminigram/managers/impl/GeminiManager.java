@@ -6,7 +6,9 @@ import com.google.genai.types.*;
 import com.pengrad.telegrambot.TelegramBot;
 import com.pengrad.telegrambot.model.Message;
 import com.pengrad.telegrambot.response.GetMeResponse;
+import kotlin.Pair;
 import me.mrnv.geminigram.Main;
+import me.mrnv.geminigram.common.AttachmentType;
 import me.mrnv.geminigram.common.LLM;
 import me.mrnv.geminigram.common.LLMRates;
 import me.mrnv.geminigram.common.SpamType;
@@ -28,12 +30,15 @@ public class GeminiManager extends Thread
 
     private final String[] textmodels = Managers.CONFIG.getArray( "gemini.text.models" );
     private final String[] imagemodels = Managers.CONFIG.getArray( "gemini.images.models" );
+    private final String[] videomodels = Managers.CONFIG.getArray( "gemini.videos.models" );
 
     private final String textthink = Managers.CONFIG.getString( "gemini.text.thinking.enabled" );
     private final String imagethink = Managers.CONFIG.getString( "gemini.images.thinking.enabled" );
+    private final String videothink = Managers.CONFIG.getString( "gemini.videos.thinking.enabled" );
 
     private final String textbudget = Managers.CONFIG.getString( "gemini.text.thinking.budget" );
     private final String imagebudget = Managers.CONFIG.getString( "gemini.images.thinking.budget" );
+    private final String videobudget = Managers.CONFIG.getString( "gemini.videos.thinking.budget" );
 
     private final BlockingQueue< Runnable > queue = new LinkedBlockingQueue<>();
 
@@ -60,21 +65,36 @@ public class GeminiManager extends Thread
     }
 
     public void reply( TelegramBot bot, GetMeResponse me, Message message, String text,
-                       byte[] instructions, @Nullable byte[] image )
+                       byte[] instructions, @Nullable Pair< AttachmentType, byte[] > attachment )
     {
-        queue.add( () -> internal( bot, me, message, text, instructions, image, null ) );
+        queue.add( () -> internal( bot, me, message, text, instructions, attachment, null ) );
     }
 
     private void internal( TelegramBot bot, GetMeResponse me, Message message, String text,
-                          byte[] instructions, @Nullable byte[] image, @Nullable LLMRates ratelimiter )
+                          byte[] instructions, @Nullable Pair< AttachmentType, byte[] > attachment, @Nullable LLMRates ratelimiter )
     {
-        String[] models = image == null
-                ? textmodels
-                : imagemodels;
+        String[] models;
+        SpamType spamtype;
 
-        SpamType spamtype = image == null
-                ? SpamType.TEXT
-                : SpamType.IMAGES;
+        if( attachment == null )
+        {
+            models = textmodels;
+            spamtype = SpamType.TEXT;
+        }
+        else
+        {
+            models = switch( attachment.component1() )
+            {
+                case IMAGE -> imagemodels;
+                case VIDEO -> videomodels;
+            };
+
+            spamtype = switch( attachment.component1() )
+            {
+                case IMAGE -> SpamType.IMAGES;
+                case VIDEO -> SpamType.VIDEOS;
+            };
+        }
 
         boolean canretry = ratelimiter == null;
         List< LLMRates > list;
@@ -93,12 +113,20 @@ public class GeminiManager extends Thread
 
         LLM model = ratelimiter.getModel();
 
+        AttachmentType attach = attachment != null ? attachment.component1() : null;
+
+        boolean hasimage = attachment != null &&
+                attachment.component1() == AttachmentType.IMAGE;
+
+        boolean hasvideo = attachment != null &&
+                attachment.component1() == AttachmentType.VIDEO;
+
         boolean think = model.isCanThink();
         if( think )
-            think = shouldThink( image != null );
+            think = shouldThink( attach );
 
         // force thinking
-        if( image == null && model == LLM.GEMINI_2_5_FLASH )
+        if( attachment == null && model == LLM.GEMINI_2_5_FLASH )
             think = true;
         
         // cant disable thinking for Gemini 2.5 Pro
@@ -106,7 +134,7 @@ public class GeminiManager extends Thread
             think = true;
 
         // disable thinking for text only prompts using Gemini 2.5 Flash Lite
-        if( image == null && model == LLM.GEMINI_2_5_FLASH_LITE )
+        if( attachment == null && model == LLM.GEMINI_2_5_FLASH_LITE )
             think = false;
 
         try
@@ -140,10 +168,13 @@ public class GeminiManager extends Thread
                 if( text != null )
                     parts.add( Part.fromText( text ) );
 
-                if( image != null )
-                    parts.add( Part.fromBytes( image, "image/jpeg" ) );
+                if( hasimage )
+                    parts.add( Part.fromBytes( attachment.component2(), "image/jpeg" ) );
 
-                int budget = getThinkingBudget( think, model, image != null );
+                if( hasvideo )
+                    parts.add( Part.fromBytes( attachment.component2(), "video/mp4" ) );
+
+                int budget = getThinkingBudget( think, model, attach );
 
                 Content content = Content.fromParts( parts.toArray( new Part[ 0 ] ) );
                 GenerateContentConfig cfg = GenerateContentConfig.builder()
@@ -167,7 +198,7 @@ public class GeminiManager extends Thread
                         if( !list.isEmpty() )
                         {
                             LLMRates random = list.get( ThreadLocalRandom.current().nextInt( list.size() ) );
-                            queue.add( () -> internal( bot, me, message, text, instructions, image, random ) );
+                            queue.add( () -> internal( bot, me, message, text, instructions, attachment, random ) );
                         }
                     }
 
@@ -206,9 +237,19 @@ public class GeminiManager extends Thread
                 .build();
     }
 
-    private boolean shouldThink( boolean image )
+    private boolean shouldThink( AttachmentType attachment )
     {
-        String str = image ? imagethink : textthink;
+        String str;
+        if( attachment == null )
+            str = textthink;
+        else
+        {
+            str = switch( attachment )
+            {
+                case IMAGE -> imagethink;
+                case VIDEO -> videothink;
+            };
+        }
 
         return switch( str )
         {
@@ -218,11 +259,22 @@ public class GeminiManager extends Thread
         };
     }
 
-    private int getThinkingBudget( boolean shouldthink, LLM model, boolean image )
+    private int getThinkingBudget( boolean shouldthink, LLM model, AttachmentType attachment )
     {
         if( !shouldthink ) return 0; // dont think
 
-        String value = image ? imagebudget : textbudget;
+        String value;
+        if( attachment == null )
+            value = textbudget;
+        else
+        {
+            value = switch( attachment )
+            {
+                case IMAGE -> imagebudget;
+                case VIDEO -> videobudget;
+            };
+        }
+
         if( "auto".equalsIgnoreCase( value ) )
             return -1;
 

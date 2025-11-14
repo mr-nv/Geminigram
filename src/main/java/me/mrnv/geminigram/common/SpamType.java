@@ -8,7 +8,8 @@ import lombok.RequiredArgsConstructor;
 public enum SpamType
 {
     TEXT( "antispam.text" ),
-    IMAGES( "antispam.images" );
+    IMAGES( "antispam.images" ),
+    VIDEOS( "antispam.videos" );
 
     private final String configEntry;
 }
