@@ -49,6 +49,7 @@ public class TelegramManager
     {
         boolean reactToImages = Managers.CONFIG.getBool( "telegram.reactToImages" );
         boolean reactToVideos = Managers.CONFIG.getBool( "telegram.reactToVideos" );
+        boolean reactToAudio = Managers.CONFIG.getBool( "telegram.reactToAudio" );
 
         for( TelegramBotEntry entry : startlist )
         {
@@ -103,7 +104,7 @@ public class TelegramManager
                                 User from = message.from();
 
                                 String text;
-                                if( message.photo() != null || message.video() != null )
+                                if( message.photo() != null || message.video() != null || message.audio() != null )
                                     text = message.caption();
                                 else
                                     text = message.text();
@@ -246,6 +247,27 @@ public class TelegramManager
                                     continue;
                                 }
 
+                                boolean hasaudio = reactToAudio && message.audio() != null;
+                                if( hasaudio )
+                                {
+                                    try
+                                    {
+                                        Audio audio = message.audio();
+                                        if( audio.duration() != null && audio.duration() <= 300 ) // 5 minutes is the max length
+                                        {
+                                            if( !Managers.SPAM.check( me.user().id(), chat.id(), SpamType.AUDIO ) ) continue;
+
+                                            String finalText2 = text;
+                                            downloadAttachment( bot, audio, bytes ->
+                                            {
+                                                Managers.GEMINI.reply( bot, me, message, finalText2, instructions,
+                                                        new Pair<>( AttachmentType.AUDIO, bytes ) );
+                                            } );
+                                        }
+                                    }
+                                    catch( Throwable ignored ) {}
+                                }
+
                                 if( textcmd && text != null )
                                 {
                                     if( !Managers.SPAM.check( me.user().id(), chat.id(), SpamType.TEXT ) ) continue;
@@ -373,6 +395,14 @@ public class TelegramManager
                     return;
 
                 fileid = video.fileId();
+            }
+            else if( attachment instanceof Audio audio )
+            {
+                // mp3 files only
+                if( audio.mimeType() == null || !"audio/mpeg".equals( audio.mimeType() ) )
+                    return;
+
+                fileid = audio.fileId();
             }
 
             // shouldnt happen

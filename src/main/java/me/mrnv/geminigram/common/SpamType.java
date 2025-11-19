@@ -9,7 +9,8 @@ public enum SpamType
 {
     TEXT( "antispam.text" ),
     IMAGES( "antispam.images" ),
-    VIDEOS( "antispam.videos" );
+    VIDEOS( "antispam.videos" ),
+    AUDIO( "antispam.audio" );
 
     private final String configEntry;
 }

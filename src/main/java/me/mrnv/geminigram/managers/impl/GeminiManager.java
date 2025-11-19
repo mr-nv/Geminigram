@@ -31,14 +31,17 @@ public class GeminiManager extends Thread
     private final String[] textmodels = Managers.CONFIG.getArray( "gemini.text.models" );
     private final String[] imagemodels = Managers.CONFIG.getArray( "gemini.images.models" );
     private final String[] videomodels = Managers.CONFIG.getArray( "gemini.videos.models" );
+    private final String[] audiomodels = Managers.CONFIG.getArray( "gemini.audio.models" );
 
     private final String textthink = Managers.CONFIG.getString( "gemini.text.thinking.enabled" );
     private final String imagethink = Managers.CONFIG.getString( "gemini.images.thinking.enabled" );
     private final String videothink = Managers.CONFIG.getString( "gemini.videos.thinking.enabled" );
+    private final String audiothink = Managers.CONFIG.getString( "gemini.audio.thinking.enabled" );
 
     private final String textbudget = Managers.CONFIG.getString( "gemini.text.thinking.budget" );
     private final String imagebudget = Managers.CONFIG.getString( "gemini.images.thinking.budget" );
     private final String videobudget = Managers.CONFIG.getString( "gemini.videos.thinking.budget" );
+    private final String audiobudget = Managers.CONFIG.getString( "gemini.audio.thinking.budget" );
 
     private final BlockingQueue< Runnable > queue = new LinkedBlockingQueue<>();
 
@@ -87,12 +90,14 @@ public class GeminiManager extends Thread
             {
                 case IMAGE -> imagemodels;
                 case VIDEO -> videomodels;
+                case AUDIO -> audiomodels;
             };
 
             spamtype = switch( attachment.component1() )
             {
                 case IMAGE -> SpamType.IMAGES;
                 case VIDEO -> SpamType.VIDEOS;
+                case AUDIO -> SpamType.AUDIO;
             };
         }
 
@@ -121,6 +126,9 @@ public class GeminiManager extends Thread
         boolean hasvideo = attachment != null &&
                 attachment.component1() == AttachmentType.VIDEO;
 
+        boolean hasaudio = attachment != null &&
+                attachment.component1() == AttachmentType.AUDIO;
+
         boolean think = model.isCanThink();
         if( think )
             think = shouldThink( attach );
@@ -139,6 +147,10 @@ public class GeminiManager extends Thread
 
         try
         {
+            // text prompts already send the typing action
+            if( attach != null )
+                Managers.TELEGRAM.sendTyping( bot, message.chat() );
+
             ratelimiter.setTime( System.currentTimeMillis() );
             ratelimiter.increaseCount( 1 );
 
@@ -173,6 +185,9 @@ public class GeminiManager extends Thread
 
                 if( hasvideo )
                     parts.add( Part.fromBytes( attachment.component2(), "video/mp4" ) );
+
+                if( hasaudio )
+                    parts.add( Part.fromBytes( attachment.component2(), "audio/mp3" ) );
 
                 int budget = getThinkingBudget( think, model, attach );
 
@@ -248,6 +263,7 @@ public class GeminiManager extends Thread
             {
                 case IMAGE -> imagethink;
                 case VIDEO -> videothink;
+                case AUDIO -> audiothink;
             };
         }
 
@@ -272,6 +288,7 @@ public class GeminiManager extends Thread
             {
                 case IMAGE -> imagebudget;
                 case VIDEO -> videobudget;
+                case AUDIO -> audiobudget;
             };
         }
 
